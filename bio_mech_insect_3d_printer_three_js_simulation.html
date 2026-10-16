@@ -1,0 +1,1622 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Bio-Mech Insect 3D Printer — Three.js Simulation</title>
+  <script src="https://cdn.tailwindcss.com/3.4.17"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    body {
+      font-family: 'Inter', sans-serif;
+      background-color: #070b14;
+      color: #e2e8f0;
+      overflow: hidden;
+      margin: 0;
+      padding: 0;
+      user-select: none;
+    }
+    .mono {
+      font-family: 'JetBrains Mono', monospace;
+    }
+    #canvas-container {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      z-index: 1;
+      cursor: grab;
+    }
+    #canvas-container:active {
+      cursor: grabbing;
+    }
+    .glass-panel {
+      background: rgba(15, 23, 42, 0.78);
+      backdrop-filter: blur(14px);
+      -webkit-backdrop-filter: blur(14px);
+      border: 1px solid rgba(56, 189, 248, 0.22);
+      box-shadow: 0 12px 32px -4px rgba(0, 0, 0, 0.6), 0 0 20px rgba(14, 165, 233, 0.08);
+    }
+    input[type="range"] {
+      accent-color: #38bdf8;
+    }
+    @keyframes pulse-glow {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50% { opacity: 0.55; transform: scale(1.08); }
+    }
+    .status-dot-active {
+      animation: pulse-glow 1.2s infinite ease-in-out;
+    }
+  </style>
+</head>
+<body class="relative w-screen h-screen overflow-hidden select-none">
+
+  <!-- 3D Viewport -->
+  <div id="canvas-container"></div>
+
+  <!-- Top Header & Telemetry Bar -->
+  <header class="relative z-10 pointer-events-none flex flex-wrap items-center justify-between gap-3 p-3 sm:p-4">
+    <div class="glass-panel pointer-events-auto rounded-2xl px-4 py-2.5 flex items-center gap-3">
+      <div class="w-9 h-9 rounded-xl bg-sky-500/20 border border-sky-400/40 flex items-center justify-center text-sky-400">
+        <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z" />
+        </svg>
+      </div>
+      <div>
+        <div class="flex items-center gap-2">
+          <h1 class="text-sm sm:text-base font-bold tracking-tight bg-gradient-to-r from-pink-400 via-amber-300 to-cyan-400 bg-clip-text text-transparent">CHRONO-PAPILLON MK-V • BUTTERFLY</h1>
+          <span id="status-badge" class="inline-flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wider px-2.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-400/30">
+            <span id="status-dot" class="w-1.5 h-1.5 rounded-full bg-emerald-400 status-dot-active"></span>
+            <span id="status-text">PRINTING</span>
+          </span>
+        </div>
+        <p class="text-[11px] text-slate-400 hidden sm:block">Multi-Chromatic SLA + Filigree Sintering • Stained-Glass Wings &amp; Clockwork Core</p>
+      </div>
+    </div>
+
+    <!-- Time Required & Live Timer Card -->
+    <div class="glass-panel pointer-events-auto rounded-2xl px-4 py-2.5 flex flex-wrap items-center gap-4 sm:gap-6">
+      <div>
+        <div class="text-[10px] uppercase tracking-wider text-slate-400 font-semibold">Total Time Required</div>
+        <div id="total-time-display" class="mono text-base sm:text-lg font-bold text-sky-400">24.00 s</div>
+      </div>
+      <div class="h-7 w-px bg-slate-700/80"></div>
+      <div>
+        <div class="text-[10px] uppercase tracking-wider text-slate-400 font-semibold">Elapsed Draw Time</div>
+        <div id="elapsed-time-display" class="mono text-base sm:text-lg font-bold text-white">00.00 s</div>
+      </div>
+      <div class="h-7 w-px bg-slate-700/80 hidden sm:block"></div>
+      <div class="hidden sm:block">
+        <div class="text-[10px] uppercase tracking-wider text-slate-400 font-semibold">Remaining Time</div>
+        <div id="remaining-time-display" class="mono text-base sm:text-lg font-bold text-amber-300">24.00 s</div>
+      </div>
+      <div class="h-7 w-px bg-slate-700/80"></div>
+      <div>
+        <div class="text-[10px] uppercase tracking-wider text-slate-400 font-semibold">Layer Progress</div>
+        <div class="mono text-sm sm:text-base font-bold text-emerald-400">
+          <span id="layer-current">0</span><span class="text-slate-500"> / </span><span id="layer-total">300</span>
+          <span id="percent-display" class="ml-1 text-xs text-slate-300">(0%)</span>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <!-- Right Side Mechanical Parts Inspector -->
+  <aside class="fixed right-3 sm:right-4 top-24 z-10 pointer-events-none hidden md:flex flex-col gap-2.5 w-64">
+    <div class="glass-panel pointer-events-auto rounded-2xl p-3.5 space-y-3">
+      <div class="flex items-center justify-between border-b border-slate-700/70 pb-2">
+        <span class="text-xs font-semibold uppercase tracking-wider text-sky-300">Internal Assembly Specs</span>
+        <span class="mono text-[11px] text-slate-400">112 Parts</span>
+      </div>
+      <div class="space-y-2 text-xs">
+        <div class="flex items-center justify-between">
+          <span class="text-slate-300 flex items-center gap-1.5">
+            <span class="w-2 h-2 rounded-full bg-cyan-400"></span>Carapace Resin
+          </span>
+          <span id="spec-shell" class="mono text-cyan-300">Clear Optical</span>
+        </div>
+        <div class="flex items-center justify-between">
+          <span class="text-slate-300 flex items-center gap-1.5">
+            <span class="w-2 h-2 rounded-full bg-amber-400"></span>Gear Train (x9)
+          </span>
+          <span id="spec-gears" class="mono text-amber-300">Pending...</span>
+        </div>
+        <div class="flex items-center justify-between">
+          <span class="text-slate-300 flex items-center gap-1.5">
+            <span class="w-2 h-2 rounded-full bg-rose-400"></span>Thorax Piston Core
+          </span>
+          <span id="spec-core" class="mono text-rose-300">Pending...</span>
+        </div>
+        <div class="flex items-center justify-between">
+          <span class="text-slate-300 flex items-center gap-1.5">
+            <span class="w-2 h-2 rounded-full bg-emerald-400"></span>Servo Micro-Linkages
+          </span>
+          <span id="spec-servos" class="mono text-emerald-300">Pending...</span>
+        </div>
+      </div>
+
+      <div class="pt-1 border-t border-slate-700/70 space-y-2">
+        <div class="flex items-center justify-between text-[11px]">
+          <span class="text-slate-400">Nozzle Temp</span>
+          <span id="nozzle-temp" class="mono text-orange-400 font-semibold">215 °C</span>
+        </div>
+        <div class="flex items-center justify-between text-[11px]">
+          <span class="text-slate-400">Laser Power</span>
+          <span id="laser-power" class="mono text-sky-400 font-semibold">405 nm • 85%</span>
+        </div>
+        <div class="flex items-center justify-between text-[11px]">
+          <span class="text-slate-400">Nozzle Coords</span>
+          <span id="nozzle-coords" class="mono text-slate-300">X:0.0 Y:0.0 Z:0.0</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Camera Presets & Visual Modes -->
+    <div class="glass-panel pointer-events-auto rounded-2xl p-3.5 space-y-2.5">
+      <div class="text-xs font-semibold uppercase tracking-wider text-sky-300">Camera &amp; Optics</div>
+      <div class="grid grid-cols-3 gap-1.5">
+        <button id="cam-iso" class="px-2 py-1.5 rounded-lg bg-slate-800/90 hover:bg-sky-500/20 border border-slate-700 hover:border-sky-400/50 text-xs font-medium text-slate-200 transition">Isometric</button>
+        <button id="cam-side" class="px-2 py-1.5 rounded-lg bg-slate-800/90 hover:bg-sky-500/20 border border-slate-700 hover:border-sky-400/50 text-xs font-medium text-slate-200 transition">Side</button>
+        <button id="cam-top" class="px-2 py-1.5 rounded-lg bg-slate-800/90 hover:bg-sky-500/20 border border-slate-700 hover:border-sky-400/50 text-xs font-medium text-slate-200 transition">Top-Down</button>
+      </div>
+      <div class="pt-1">
+        <div class="flex justify-between text-[11px] mb-1">
+          <span class="text-slate-300">Shell Transparency</span>
+          <span id="opacity-label" class="mono text-sky-300">28% Opacity</span>
+        </div>
+        <input id="shell-opacity" type="range" min="8" max="85" value="28" class="w-full h-1.5 bg-slate-700 rounded-lg cursor-pointer" />
+      </div>
+      <div class="flex items-center justify-between pt-1">
+        <span class="text-xs text-slate-300">Internal Clockwork Drive</span>
+        <button id="toggle-mech-btn" class="px-2.5 py-1 rounded-lg bg-amber-500/20 border border-amber-400/40 text-amber-300 text-xs font-medium hover:bg-amber-500/30 transition">
+          Active: ON
+        </button>
+      </div>
+      <div class="flex items-center justify-between pt-0.5">
+        <span class="text-xs text-slate-300">Auto-Orbit Turntable</span>
+        <button id="toggle-orbit-btn" class="px-2.5 py-1 rounded-lg bg-slate-800 border border-slate-600 text-slate-300 text-xs font-medium hover:bg-slate-700 transition">
+          Orbit: OFF
+        </button>
+      </div>
+    </div>
+  </aside>
+
+  <!-- Bottom Control Deck -->
+  <footer class="fixed bottom-3 sm:bottom-4 inset-x-3 sm:inset-x-4 z-10 pointer-events-none flex flex-col items-center">
+    <div class="glass-panel pointer-events-auto w-full max-w-4xl rounded-2xl p-3 sm:p-4 space-y-3">
+      <!-- Progress Bar & Manual Layer Scrubber -->
+      <div class="space-y-1.5">
+        <div class="flex items-center justify-between text-xs">
+          <span class="text-slate-300 font-medium flex items-center gap-2">
+            <span>Additive Manufacturing Timeline</span>
+            <span id="completion-banner" class="hidden text-emerald-300 font-semibold bg-emerald-500/20 border border-emerald-400/40 px-2 py-0.5 rounded-md">
+              Print Complete in <span id="final-time-taken">24.00 s</span>!
+            </span>
+          </span>
+          <span class="mono text-xs text-sky-300" id="z-height-label">Z-Height: 0.00 mm / 36.00 mm</span>
+        </div>
+        <input id="progress-scrubber" type="range" min="0" max="1000" value="0" class="w-full h-2 bg-slate-800 rounded-lg cursor-pointer" />
+      </div>
+
+      <!-- Primary Controls Row -->
+      <div class="flex flex-wrap items-center justify-between gap-3">
+        <!-- Start / Stop / Reset Buttons -->
+        <div class="flex items-center gap-2.5">
+          <button id="start-btn" class="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-sm shadow-lg shadow-emerald-500/25 transition active:scale-95 disabled:opacity-40 disabled:pointer-events-none">
+            <svg class="w-4 h-4 fill-current" viewBox="0 0 20 20">
+              <path d="M6.3 2.841A1.5 1.5 0 004 4.11V15.89a1.5 1.5 0 002.3 1.269l9.344-5.89a1.5 1.5 0 000-2.538L6.3 2.84z" />
+            </svg>
+            <span>Start Print</span>
+          </button>
+
+          <button id="stop-btn" class="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-rose-500 hover:bg-rose-400 text-white font-bold text-sm shadow-lg shadow-rose-500/25 transition active:scale-95 disabled:opacity-40 disabled:pointer-events-none">
+            <svg class="w-4 h-4 fill-current" viewBox="0 0 20 20">
+              <path fill-rule="evenodd" d="M5.5 3.5A1.5 1.5 0 017 2h6a1.5 1.5 0 011.5 1.5v13A1.5 1.5 0 0113 18H7a1.5 1.5 0 01-1.5-1.5v-13z" clip-rule="evenodd" />
+            </svg>
+            <span>Stop Print</span>
+          </button>
+
+          <button id="reset-btn" class="flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-600/80 text-slate-200 font-semibold text-xs sm:text-sm transition active:scale-95">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+            </svg>
+            <span>Reset</span>
+          </button>
+        </div>
+
+        <!-- Print Speed & Audio Controls -->
+        <div class="flex flex-wrap items-center gap-2">
+          <div class="flex items-center bg-slate-900/90 border border-slate-700/80 rounded-xl p-1 gap-1">
+            <span class="text-[11px] font-medium text-slate-400 px-2">Print Speed:</span>
+            <button data-speed="1" class="speed-btn px-2.5 py-1 rounded-lg text-xs font-semibold bg-sky-500 text-slate-950 transition">1x (24s)</button>
+            <button data-speed="2" class="speed-btn px-2.5 py-1 rounded-lg text-xs font-semibold text-slate-300 hover:text-white transition">2x (12s)</button>
+            <button data-speed="4" class="speed-btn px-2.5 py-1 rounded-lg text-xs font-semibold text-slate-300 hover:text-white transition">4x (6s)</button>
+          </div>
+
+          <button id="audio-btn" class="px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-600/80 text-slate-300 text-xs font-medium flex items-center gap-1.5 transition" title="Toggle Printer Synthesizer Sound">
+            <span id="audio-icon">🔇</span>
+            <span id="audio-label" class="hidden sm:inline">Sound Off</span>
+          </button>
+        </div>
+      </div>
+    </div>
+  </footer>
+
+  <script>
+    window.addEventListener('load', () => {
+      // ==========================================
+      // 1. STATE & TIMING CONFIGURATION
+      // ==========================================
+      const BASE_DURATION_SECONDS = 24.0; // 24 seconds at 1x speed
+      const TOTAL_LAYERS = 300;
+      const PRINT_Y_MIN = 0.0;
+      const PRINT_Y_MAX = 3.6;
+
+      let isPrinting = true;
+      let printProgress = 0.0; // 0.0 to 1.0
+      let speedMultiplier = 1.0;
+      let elapsedDrawSeconds = 0.0; // actual elapsed time spent drawing
+      let mechanoActive = true;
+      let autoOrbit = false;
+      let soundEnabled = false;
+
+      // DOM Elements
+      const container = document.getElementById('canvas-container');
+      const statusBadge = document.getElementById('status-badge');
+      const statusDot = document.getElementById('status-dot');
+      const statusText = document.getElementById('status-text');
+      const totalTimeDisplay = document.getElementById('total-time-display');
+      const elapsedTimeDisplay = document.getElementById('elapsed-time-display');
+      const remainingTimeDisplay = document.getElementById('remaining-time-display');
+      const layerCurrentEl = document.getElementById('layer-current');
+      const layerTotalEl = document.getElementById('layer-total');
+      const percentDisplayEl = document.getElementById('percent-display');
+      const zHeightLabel = document.getElementById('z-height-label');
+      const progressScrubber = document.getElementById('progress-scrubber');
+      const completionBanner = document.getElementById('completion-banner');
+      const finalTimeTakenEl = document.getElementById('final-time-taken');
+
+      const specGears = document.getElementById('spec-gears');
+      const specCore = document.getElementById('spec-core');
+      const specServos = document.getElementById('spec-servos');
+      const nozzleTempEl = document.getElementById('nozzle-temp');
+      const laserPowerEl = document.getElementById('laser-power');
+      const nozzleCoordsEl = document.getElementById('nozzle-coords');
+
+      const startBtn = document.getElementById('start-btn');
+      const stopBtn = document.getElementById('stop-btn');
+      const resetBtn = document.getElementById('reset-btn');
+      const speedBtns = document.querySelectorAll('.speed-btn');
+      const shellOpacitySlider = document.getElementById('shell-opacity');
+      const opacityLabel = document.getElementById('opacity-label');
+      const toggleMechBtn = document.getElementById('toggle-mech-btn');
+      const toggleOrbitBtn = document.getElementById('toggle-orbit-btn');
+      const audioBtn = document.getElementById('audio-btn');
+      const audioIcon = document.getElementById('audio-icon');
+      const audioLabel = document.getElementById('audio-label');
+
+      layerTotalEl.textContent = TOTAL_LAYERS;
+
+      // ==========================================
+      // 2. SYNTHESIZED PRINTER SOUND (WEB AUDIO)
+      // ==========================================
+      let audioCtx = null;
+      let stepperOsc = null;
+      let stepperGain = null;
+
+      function initAudio() {
+        if (audioCtx) return;
+        const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+        if (!AudioContextClass) return;
+        audioCtx = new AudioContextClass();
+        stepperOsc = audioCtx.createOscillator();
+        stepperGain = audioCtx.createGain();
+        stepperOsc.type = 'triangle';
+        stepperOsc.frequency.value = 180;
+        stepperGain.gain.value = 0.0;
+        stepperOsc.connect(stepperGain);
+        stepperGain.connect(audioCtx.destination);
+        stepperOsc.start();
+      }
+
+      function updateAudio(nozzleSpeed, active) {
+        if (!audioCtx || !stepperGain || !stepperOsc) return;
+        if (!soundEnabled || !active) {
+          stepperGain.gain.setTargetAtTime(0.0, audioCtx.currentTime, 0.05);
+          return;
+        }
+        const freq = 140 + Math.min(420, nozzleSpeed * 65 * speedMultiplier);
+        stepperOsc.frequency.setTargetAtTime(freq, audioCtx.currentTime, 0.03);
+        stepperGain.gain.setTargetAtTime(0.035, audioCtx.currentTime, 0.04);
+      }
+
+      // ==========================================
+      // 3. THREE.JS SCENE, CAMERA & RENDERER
+      // ==========================================
+      const scene = new THREE.Scene();
+      scene.background = new THREE.Color(0x070b14);
+      scene.fog = new THREE.FogExp2(0x070b14, 0.032);
+
+      const camera = new THREE.PerspectiveCamera(42, window.innerWidth / window.innerHeight, 0.1, 100);
+
+      const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
+      renderer.setSize(window.innerWidth, window.innerHeight);
+      renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+      renderer.localClippingEnabled = true;
+      renderer.shadowMap.enabled = true;
+      renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+      container.appendChild(renderer.domElement);
+
+      // Custom Orbital Camera Controller
+      const camState = {
+        theta: 0.65,
+        phi: 1.08,
+        radius: 10.5,
+        target: new THREE.Vector3(0, 1.85, 0),
+        isDragging: false,
+        prevX: 0,
+        prevY: 0
+      };
+
+      function updateCameraPosition() {
+        camState.phi = Math.max(0.18, Math.min(Math.PI / 2 - 0.02, camState.phi));
+        camState.radius = Math.max(4.5, Math.min(20, camState.radius));
+        camera.position.x = camState.target.x + camState.radius * Math.sin(camState.phi) * Math.sin(camState.theta);
+        camera.position.y = camState.target.y + camState.radius * Math.cos(camState.phi);
+        camera.position.z = camState.target.z + camState.radius * Math.sin(camState.phi) * Math.cos(camState.theta);
+        camera.lookAt(camState.target);
+      }
+      updateCameraPosition();
+
+      container.addEventListener('pointerdown', (e) => {
+        camState.isDragging = true;
+        camState.prevX = e.clientX;
+        camState.prevY = e.clientY;
+      });
+      window.addEventListener('pointermove', (e) => {
+        if (!camState.isDragging) return;
+        const dx = e.clientX - camState.prevX;
+        const dy = e.clientY - camState.prevY;
+        camState.prevX = e.clientX;
+        camState.prevY = e.clientY;
+        camState.theta -= dx * 0.007;
+        camState.phi -= dy * 0.006;
+        updateCameraPosition();
+      });
+      window.addEventListener('pointerup', () => {
+        camState.isDragging = false;
+      });
+      container.addEventListener('wheel', (e) => {
+        e.preventDefault();
+        camState.radius += e.deltaY * 0.005;
+        updateCameraPosition();
+      }, { passive: false });
+
+      // Lighting
+      const ambientLight = new THREE.AmbientLight(0x94a3b8, 0.7);
+      scene.add(ambientLight);
+
+      const dirLight1 = new THREE.DirectionalLight(0xe0f2fe, 1.35);
+      dirLight1.position.set(6, 10, 7);
+      dirLight1.castShadow = true;
+      scene.add(dirLight1);
+
+      const dirLight2 = new THREE.DirectionalLight(0xfbbf24, 0.75);
+      dirLight2.position.set(-7, 5, -5);
+      scene.add(dirLight2);
+
+      const rimLight = new THREE.PointLight(0x38bdf8, 1.2, 14);
+      rimLight.position.set(0, 3.2, -4.5);
+      scene.add(rimLight);
+
+      // Nozzle Dynamic Point Light
+      const nozzleLight = new THREE.PointLight(0x00f5d4, 2.4, 4.5);
+      scene.add(nozzleLight);
+
+      // ==========================================
+      // 4. CLIPPING PLANE FOR ADDITIVE 3D PRINTING
+      // ==========================================
+      // Anything with y <= currentPrintHeight is visible
+      const printClipPlane = new THREE.Plane(new THREE.Vector3(0, -1, 0), PRINT_Y_MIN);
+
+      // ==========================================
+      // 5. 3D PRINTER GANTRY, BUILD PLATE & NOZZLE
+      // ==========================================
+      const printerGroup = new THREE.Group();
+      scene.add(printerGroup);
+
+      const frameMat = new THREE.MeshStandardMaterial({
+        color: 0x1e293b,
+        metalness: 0.8,
+        roughness: 0.25
+      });
+      const railMat = new THREE.MeshStandardMaterial({
+        color: 0x94a3b8,
+        metalness: 0.9,
+        roughness: 0.15
+      });
+
+      // Build Platform Base
+      const baseGeom = new THREE.CylinderGeometry(3.6, 3.9, 0.35, 48);
+      const baseMesh = new THREE.Mesh(baseGeom, frameMat);
+      baseMesh.position.y = -0.18;
+      baseMesh.receiveShadow = true;
+      printerGroup.add(baseMesh);
+
+      // Glowing Build Plate Surface + Polar/Cartesian Grid
+      const plateRingGeom = new THREE.RingGeometry(3.38, 3.46, 64);
+      const plateRingMat = new THREE.MeshBasicMaterial({ color: 0x38bdf8, side: THREE.DoubleSide });
+      const plateRing = new THREE.Mesh(plateRingGeom, plateRingMat);
+      plateRing.rotation.x = -Math.PI / 2;
+      plateRing.position.y = 0.005;
+      printerGroup.add(plateRing);
+
+      const gridHelper = new THREE.GridHelper(5.4, 18, 0x38bdf8, 0x1e3a5f);
+      gridHelper.position.y = 0.003;
+      printerGroup.add(gridHelper);
+
+      // 4 Corner Pillars & Z-Axis Lead Screws
+      const pillarPositions = [
+        [-3.2, -3.2], [3.2, -3.2], [-3.2, 3.2], [3.2, 3.2]
+      ];
+      pillarPositions.forEach(([px, pz]) => {
+        const col = new THREE.Mesh(new THREE.BoxGeometry(0.24, 5.0, 0.24), frameMat);
+        col.position.set(px, 2.4, pz);
+        printerGroup.add(col);
+
+        const rod = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 4.9, 12), railMat);
+        rod.position.set(px * 0.9, 2.4, pz * 0.9);
+        printerGroup.add(rod);
+      });
+
+      // Top Frame Ring
+      const topBars = [
+        { size: [6.64, 0.22, 0.22], pos: [0, 4.85, -3.2] },
+        { size: [6.64, 0.22, 0.22], pos: [0, 4.85, 3.2] },
+        { size: [0.22, 0.22, 6.64], pos: [-3.2, 4.85, 0] },
+        { size: [0.22, 0.22, 6.64], pos: [3.2, 4.85, 0] }
+      ];
+      topBars.forEach(b => {
+        const m = new THREE.Mesh(new THREE.BoxGeometry(...b.size), frameMat);
+        m.position.set(...b.pos);
+        printerGroup.add(m);
+      });
+
+      // Moving Z-Gantry Bridge (Moves Up as layers print)
+      const zGantryGroup = new THREE.Group();
+      printerGroup.add(zGantryGroup);
+
+      const zSideLeft = new THREE.Mesh(new THREE.BoxGeometry(0.28, 0.22, 6.4), frameMat);
+      zSideLeft.position.set(-3.2, 0, 0);
+      zGantryGroup.add(zSideLeft);
+
+      const zSideRight = new THREE.Mesh(new THREE.BoxGeometry(0.28, 0.22, 6.4), frameMat);
+      zSideRight.position.set(3.2, 0, 0);
+      zGantryGroup.add(zSideRight);
+
+      // Moving Y-Bridge (Moves front/back along Z)
+      const yBridgeGroup = new THREE.Group();
+      zGantryGroup.add(yBridgeGroup);
+
+      const xRail1 = new THREE.Mesh(new THREE.CylinderGeometry(0.045, 0.045, 6.3, 12), railMat);
+      xRail1.rotation.z = Math.PI / 2;
+      xRail1.position.set(0, 0.06, 0.12);
+      yBridgeGroup.add(xRail1);
+
+      const xRail2 = new THREE.Mesh(new THREE.CylinderGeometry(0.045, 0.045, 6.3, 12), railMat);
+      xRail2.rotation.z = Math.PI / 2;
+      xRail2.position.set(0, 0.06, -0.12);
+      yBridgeGroup.add(xRail2);
+
+      // Print Head / Extruder Carriage (Moves left/right along X)
+      const printHeadGroup = new THREE.Group();
+      yBridgeGroup.add(printHeadGroup);
+
+      const carriageBox = new THREE.Mesh(
+        new THREE.BoxGeometry(0.46, 0.48, 0.44),
+        new THREE.MeshStandardMaterial({ color: 0x0f172a, metalness: 0.7, roughness: 0.3 })
+      );
+      carriageBox.position.y = 0.08;
+      printHeadGroup.add(carriageBox);
+
+      // Cooling Fan Shroud Accent
+      const shroudRing = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.18, 0.22, 0.24, 16),
+        new THREE.MeshStandardMaterial({ color: 0x0284c7, metalness: 0.6, roughness: 0.2 })
+      );
+      shroudRing.position.y = -0.22;
+      printHeadGroup.add(shroudRing);
+
+      // Brass Heated Nozzle Tip
+      const nozzleCone = new THREE.Mesh(
+        new THREE.ConeGeometry(0.12, 0.32, 16),
+        new THREE.MeshStandardMaterial({
+          color: 0xf59e0b,
+          metalness: 0.9,
+          roughness: 0.2,
+          emissive: 0xd97706,
+          emissiveIntensity: 0.45
+        })
+      );
+      nozzleCone.rotation.x = Math.PI;
+      nozzleCone.position.y = -0.45;
+      printHeadGroup.add(nozzleCone);
+
+      // Glowing Extrusion Plasma Bead at Nozzle Tip (0, -0.61, 0)
+      const tipGlow = new THREE.Mesh(
+        new THREE.SphereGeometry(0.055, 16, 16),
+        new THREE.MeshBasicMaterial({ color: 0x00f5d4 })
+      );
+      tipGlow.position.y = -0.61;
+      printHeadGroup.add(tipGlow);
+
+      // ==========================================
+      // 6. COLORFUL INTRICATE BUTTERFLY + INTERNAL CLOCKWORK MECHANICS
+      // ==========================================
+      const insectRoot = new THREE.Group();
+      scene.add(insectRoot);
+
+      // Transparent Crystal Exoskeleton Material (clipped by printClipPlane)
+      const transparentShellMat = new THREE.MeshPhysicalMaterial({
+        color: 0xa5f3fc,
+        transparent: true,
+        opacity: 0.28,
+        roughness: 0.06,
+        metalness: 0.12,
+        transmission: 0.72,
+        reflectivity: 0.95,
+        ior: 1.48,
+        side: THREE.DoubleSide,
+        depthWrite: false,
+        clippingPlanes: [printClipPlane]
+      });
+
+      const chitinTrimMat = new THREE.MeshStandardMaterial({
+        color: 0xe879f9,
+        emissive: 0xc026d3,
+        emissiveIntensity: 0.35,
+        transparent: true,
+        opacity: 0.65,
+        metalness: 0.75,
+        roughness: 0.18,
+        depthWrite: false,
+        clippingPlanes: [printClipPlane]
+      });
+
+      // Colorful Stained-Glass Butterfly Wing Membrane Materials
+      const morphoCyanMat = new THREE.MeshPhysicalMaterial({
+        color: 0x00e5ff,
+        emissive: 0x0284c7,
+        emissiveIntensity: 0.45,
+        transparent: true,
+        opacity: 0.52,
+        roughness: 0.12,
+        metalness: 0.25,
+        side: THREE.DoubleSide,
+        depthWrite: false,
+        clippingPlanes: [printClipPlane]
+      });
+
+      const monarchMagentaMat = new THREE.MeshPhysicalMaterial({
+        color: 0xff2a85,
+        emissive: 0xdb2777,
+        emissiveIntensity: 0.48,
+        transparent: true,
+        opacity: 0.55,
+        roughness: 0.12,
+        metalness: 0.25,
+        side: THREE.DoubleSide,
+        depthWrite: false,
+        clippingPlanes: [printClipPlane]
+      });
+
+      const sunsetGoldMat = new THREE.MeshPhysicalMaterial({
+        color: 0xffbe0b,
+        emissive: 0xd97706,
+        emissiveIntensity: 0.5,
+        transparent: true,
+        opacity: 0.58,
+        roughness: 0.15,
+        metalness: 0.35,
+        side: THREE.DoubleSide,
+        depthWrite: false,
+        clippingPlanes: [printClipPlane]
+      });
+
+      const royalVioletMat = new THREE.MeshPhysicalMaterial({
+        color: 0xa855f7,
+        emissive: 0x7e22ce,
+        emissiveIntensity: 0.5,
+        transparent: true,
+        opacity: 0.54,
+        roughness: 0.12,
+        metalness: 0.3,
+        side: THREE.DoubleSide,
+        depthWrite: false,
+        clippingPlanes: [printClipPlane]
+      });
+
+      const emeraldSpotMat = new THREE.MeshStandardMaterial({
+        color: 0x10b981,
+        emissive: 0x059669,
+        emissiveIntensity: 0.75,
+        transparent: true,
+        opacity: 0.78,
+        metalness: 0.5,
+        roughness: 0.15,
+        side: THREE.DoubleSide,
+        depthWrite: false,
+        clippingPlanes: [printClipPlane]
+      });
+
+      // Internal Mechanical Materials (Opaque & High-Contrast Metallic)
+      const brassGearMat = new THREE.MeshStandardMaterial({
+        color: 0xfbbf24,
+        emissive: 0xb45309,
+        emissiveIntensity: 0.22,
+        metalness: 0.92,
+        roughness: 0.16,
+        clippingPlanes: [printClipPlane]
+      });
+
+      const copperMat = new THREE.MeshStandardMaterial({
+        color: 0xf97316,
+        emissive: 0xc2410c,
+        emissiveIntensity: 0.2,
+        metalness: 0.88,
+        roughness: 0.2,
+        clippingPlanes: [printClipPlane]
+      });
+
+      const anodizedVioletMat = new THREE.MeshStandardMaterial({
+        color: 0xc084fc,
+        emissive: 0x6b21a8,
+        emissiveIntensity: 0.25,
+        metalness: 0.9,
+        roughness: 0.18,
+        clippingPlanes: [printClipPlane]
+      });
+
+      const darkSteelMat = new THREE.MeshStandardMaterial({
+        color: 0x64748b,
+        metalness: 0.94,
+        roughness: 0.2,
+        clippingPlanes: [printClipPlane]
+      });
+
+      const chromeShaftMat = new THREE.MeshStandardMaterial({
+        color: 0xf8fafc,
+        metalness: 0.96,
+        roughness: 0.1,
+        clippingPlanes: [printClipPlane]
+      });
+
+      const coreGlowMat = new THREE.MeshStandardMaterial({
+        color: 0xf43f5e,
+        emissive: 0xff006e,
+        emissiveIntensity: 1.5,
+        roughness: 0.18,
+        metalness: 0.3,
+        clippingPlanes: [printClipPlane]
+      });
+
+      const eyeMat = new THREE.MeshStandardMaterial({
+        color: 0x00f5d4,
+        emissive: 0x00bbf9,
+        emissiveIntensity: 1.0,
+        metalness: 0.85,
+        roughness: 0.08,
+        clippingPlanes: [printClipPlane]
+      });
+
+      // Helper to build a precision toothed mechanical gear
+      function createMechanicalGear(radius, thickness, teethCount, material) {
+        const gearGroup = new THREE.Group();
+        const rimGeom = new THREE.CylinderGeometry(radius, radius, thickness, 32, 1, true);
+        gearGroup.add(new THREE.Mesh(rimGeom, material));
+
+        const hubGeom = new THREE.CylinderGeometry(radius * 0.42, radius * 0.42, thickness * 1.18, 20);
+        gearGroup.add(new THREE.Mesh(hubGeom, material));
+
+        for (let s = 0; s < 5; s++) {
+          const spokeGeom = new THREE.BoxGeometry(radius * 1.85, thickness * 0.72, radius * 0.14);
+          const spoke = new THREE.Mesh(spokeGeom, material);
+          spoke.rotation.y = (s * Math.PI) / 2.5;
+          gearGroup.add(spoke);
+        }
+
+        const toothWidth = (2 * Math.PI * radius) / (teethCount * 2.1);
+        const toothDepth = radius * 0.22;
+        const toothGeom = new THREE.BoxGeometry(toothWidth, thickness * 0.95, toothDepth);
+        for (let i = 0; i < teethCount; i++) {
+          const angle = (i / teethCount) * Math.PI * 2;
+          const tooth = new THREE.Mesh(toothGeom, material);
+          tooth.position.set(
+            Math.sin(angle) * (radius + toothDepth * 0.35),
+            0,
+            Math.cos(angle) * (radius + toothDepth * 0.35)
+          );
+          tooth.rotation.y = angle;
+          gearGroup.add(tooth);
+        }
+        return gearGroup;
+      }
+
+      // Helper to connect two 3D points with a golden/metallic filigree vein cylinder
+      function createVeinStrut(pA, pB, rStart, rEnd, mat) {
+        const dir = new THREE.Vector3().subVectors(pB, pA);
+        const len = dir.length();
+        const mid = new THREE.Vector3().addVectors(pA, pB).multiplyScalar(0.5);
+        const mesh = new THREE.Mesh(new THREE.CylinderGeometry(rEnd, rStart, len, 10), mat);
+        mesh.position.copy(mid);
+        mesh.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), dir.normalize());
+        return mesh;
+      }
+
+      const animatedGears = [];
+      const animatedPistons = [];
+      const animatedWings = [];
+
+      const bodyY = 1.28; // Butterfly body elevation above build plate
+
+      // ------------------------------------------
+      // A. TRANSPARENT BUTTERFLY EXOSKELETON (HEAD, PROBOSCIS, THORAX, ABDOMEN)
+      // ------------------------------------------
+      // 1. Head Capsule + Compound Eyes + Coiled Proboscis + Sweeping Clubbed Antennae
+      const headGroup = new THREE.Group();
+      headGroup.position.set(0, bodyY + 0.14, 1.15);
+      insectRoot.add(headGroup);
+
+      const headShell = new THREE.Mesh(new THREE.SphereGeometry(0.32, 28, 24), transparentShellMat);
+      headShell.scale.set(1.05, 0.92, 0.98);
+      headGroup.add(headShell);
+
+      // Coiled Golden Proboscis (Spiral Nectar Tube under Head)
+      for (let t = 0; t < 26; t++) {
+        const angle = t * 0.48;
+        const r = Math.max(0.03, 0.22 - t * 0.007);
+        const seg = new THREE.Mesh(new THREE.SphereGeometry(0.022 - t * 0.0004, 10, 10), brassGearMat);
+        seg.position.set(0, -0.16 - Math.sin(angle) * r, 0.25 + Math.cos(angle) * r);
+        headGroup.add(seg);
+      }
+
+      [-1, 1].forEach(side => {
+        // Iridescent Compound Eyes
+        const eye = new THREE.Mesh(new THREE.SphereGeometry(0.14, 18, 18), eyeMat);
+        eye.position.set(side * 0.25, 0.06, 0.14);
+        headGroup.add(eye);
+
+        // Sweeping Arched Butterfly Antennae with Glowing Teardrop Clubs
+        const antGroup = new THREE.Group();
+        antGroup.position.set(side * 0.12, 0.22, 0.18);
+        const antSegments = 14;
+        for (let i = 0; i < antSegments; i++) {
+          const u = i / antSegments;
+          const nextU = (i + 1) / antSegments;
+          const p1 = new THREE.Vector3(
+            side * (u * 0.85 + Math.pow(u, 2) * 0.35),
+            u * 1.25 - Math.pow(u, 3) * 0.35,
+            u * 0.65
+          );
+          const p2 = new THREE.Vector3(
+            side * (nextU * 0.85 + Math.pow(nextU, 2) * 0.35),
+            nextU * 1.25 - Math.pow(nextU, 3) * 0.35,
+            nextU * 0.65
+          );
+          const strut = createVeinStrut(p1, p2, 0.018, 0.015, i % 2 === 0 ? brassGearMat : anodizedVioletMat);
+          antGroup.add(strut);
+          if (i === antSegments - 1) {
+            const clubTip = new THREE.Mesh(new THREE.SphereGeometry(0.055, 14, 14), coreGlowMat);
+            clubTip.scale.set(0.8, 1.6, 0.8);
+            clubTip.position.copy(p2);
+            antGroup.add(clubTip);
+          }
+        }
+        headGroup.add(antGroup);
+      });
+
+      // 2. Transparent Crystal Thorax (Housing the Wing Drive Gear Train)
+      const thoraxGroup = new THREE.Group();
+      thoraxGroup.position.set(0, bodyY + 0.08, 0.32);
+      insectRoot.add(thoraxGroup);
+
+      const thoraxShell = new THREE.Mesh(new THREE.SphereGeometry(0.56, 32, 28), transparentShellMat);
+      thoraxShell.scale.set(0.95, 0.92, 1.32);
+      thoraxGroup.add(thoraxShell);
+
+      // Ornate Filigree Thorax Rings
+      [-0.36, -0.12, 0.12, 0.36].forEach(zOff => {
+        const s = Math.sqrt(Math.max(0.2, 1 - Math.pow(zOff / 0.65, 2)));
+        const rib = new THREE.Mesh(new THREE.TorusGeometry(0.54 * s, 0.018, 12, 36), chitinTrimMat);
+        rib.position.z = zOff;
+        thoraxGroup.add(rib);
+      });
+
+      // 3. Slender Segmented Crystal Abdomen
+      const abdomenGroup = new THREE.Group();
+      abdomenGroup.position.set(0, bodyY - 0.02, -0.95);
+      insectRoot.add(abdomenGroup);
+
+      const abdomenShell = new THREE.Mesh(new THREE.SphereGeometry(0.42, 32, 24), transparentShellMat);
+      abdomenShell.scale.set(0.82, 0.82, 2.35);
+      abdomenGroup.add(abdomenShell);
+
+      for (let i = -4; i <= 4; i++) {
+        const t = i / 4.5;
+        const rScale = Math.sqrt(Math.max(0.14, 1 - t * t));
+        const hoop = new THREE.Mesh(new THREE.TorusGeometry(0.36 * rScale, 0.016, 10, 32), chitinTrimMat);
+        hoop.position.z = i * 0.2;
+        abdomenGroup.add(hoop);
+      }
+
+      // ------------------------------------------
+      // B. INTRICATE COLORFUL STAINED-GLASS & FILIGREE WINGS
+      // ------------------------------------------
+      // Helper to build custom curved wing membrane shapes
+      function createForewingShape() {
+        const sh = new THREE.Shape();
+        sh.moveTo(0, 0);
+        sh.bezierCurveTo(0.55, 0.45, 1.65, 1.15, 2.55, 1.38);
+        sh.bezierCurveTo(2.85, 1.42, 2.95, 1.12, 2.72, 0.72);
+        sh.bezierCurveTo(2.45, 0.25, 2.15, -0.22, 1.65, -0.45);
+        sh.bezierCurveTo(1.05, -0.62, 0.42, -0.32, 0, 0);
+        return sh;
+      }
+
+      function createHindwingShape() {
+        const sh = new THREE.Shape();
+        sh.moveTo(0, 0);
+        sh.bezierCurveTo(0.55, -0.05, 1.45, -0.18, 1.95, -0.52);
+        sh.bezierCurveTo(2.15, -0.78, 1.92, -1.25, 1.55, -1.48);
+        // Intricate Swallowtail extension
+        sh.bezierCurveTo(1.42, -1.65, 1.48, -2.02, 1.32, -2.12);
+        sh.bezierCurveTo(1.15, -2.02, 1.12, -1.68, 0.92, -1.58);
+        sh.bezierCurveTo(0.55, -1.42, 0.22, -0.85, 0, 0);
+        return sh;
+      }
+
+      const forewingGeom = new THREE.ShapeGeometry(createForewingShape(), 28);
+      const hindwingGeom = new THREE.ShapeGeometry(createHindwingShape(), 28);
+
+      [-1, 1].forEach(side => {
+        const wingPivot = new THREE.Group();
+        wingPivot.position.set(side * 0.34, bodyY + 0.26, 0.25);
+        // Elevate wings gracefully at a 38-degree V-angle so printer layers slice vertically through the intricate patterns
+        wingPivot.rotation.z = side * 0.62;
+        insectRoot.add(wingPivot);
+
+        const wingAssembly = new THREE.Group();
+        if (side === -1) {
+          wingAssembly.scale.x = -1; // Mirror seamlessly for left wing
+        }
+        wingPivot.add(wingAssembly);
+
+        // Mechanical Brass Wing Root Hinge & Gear Sector
+        const hingeGear = createMechanicalGear(0.22, 0.08, 12, brassGearMat);
+        hingeGear.rotation.x = Math.PI / 2;
+        wingAssembly.add(hingeGear);
+
+        // --- 1. UPPER FOREWING (Multi-Colored Stained Glass + Filigree) ---
+        const forewingGroup = new THREE.Group();
+        // Tilt slightly in X/Y so forewing & hindwing have natural 3D camber
+        forewingGroup.rotation.x = -Math.PI / 2 + 0.18;
+        wingAssembly.add(forewingGroup);
+
+        // Base Sapphire Morpho Membrane
+        const fwBase = new THREE.Mesh(forewingGeom, morphoCyanMat);
+        forewingGroup.add(fwBase);
+
+        // Inner Monarch Sunset Magenta-Orange Stained-Glass Cell
+        const fwInner = new THREE.Mesh(forewingGeom, monarchMagentaMat);
+        fwInner.scale.set(0.76, 0.76, 1);
+        fwInner.position.set(0.18, 0.06, 0.008);
+        forewingGroup.add(fwInner);
+
+        const fwInnerBack = fwInner.clone();
+        fwInnerBack.position.z = -0.008;
+        forewingGroup.add(fwInnerBack);
+
+        // Golden Solar Core Cell near Wing Root
+        const fwGold = new THREE.Mesh(forewingGeom, sunsetGoldMat);
+        fwGold.scale.set(0.46, 0.46, 1);
+        fwGold.position.set(0.08, 0.03, 0.015);
+        forewingGroup.add(fwGold);
+
+        const fwGoldBack = fwGold.clone();
+        fwGoldBack.position.z = -0.015;
+        forewingGroup.add(fwGoldBack);
+
+        // Intricate Golden Filigree Venation Ribs radiating across Forewing
+        const fwVeinTargets = [
+          new THREE.Vector3(2.62, 1.32, 0),
+          new THREE.Vector3(2.75, 0.88, 0),
+          new THREE.Vector3(2.48, 0.42, 0),
+          new THREE.Vector3(2.12, 0.02, 0),
+          new THREE.Vector3(1.65, -0.38, 0),
+          new THREE.Vector3(1.05, -0.45, 0)
+        ];
+        const rootOrigin = new THREE.Vector3(0, 0, 0);
+        const midHub = new THREE.Vector3(1.15, 0.42, 0);
+
+        // Main Costal Leading Edge Spar (Thick Golden Strut)
+        forewingGroup.add(createVeinStrut(rootOrigin, new THREE.Vector3(1.45, 0.95, 0), 0.038, 0.028, brassGearMat));
+        forewingGroup.add(createVeinStrut(new THREE.Vector3(1.45, 0.95, 0), new THREE.Vector3(2.62, 1.32, 0), 0.028, 0.016, brassGearMat));
+        forewingGroup.add(createVeinStrut(rootOrigin, midHub, 0.032, 0.022, copperMat));
+
+        fwVeinTargets.forEach((pt, idx) => {
+          const startPt = idx < 4 ? midHub : rootOrigin;
+          forewingGroup.add(createVeinStrut(startPt, pt, 0.02, 0.009, idx % 2 === 0 ? brassGearMat : copperMat));
+          // Cross-filigree arches between veins
+          if (idx > 0) {
+            const prevPt = fwVeinTargets[idx - 1];
+            const a1 = startPt.clone().lerp(prevPt, 0.65);
+            const a2 = startPt.clone().lerp(pt, 0.65);
+            forewingGroup.add(createVeinStrut(a1, a2, 0.014, 0.014, anodizedVioletMat));
+            const b1 = startPt.clone().lerp(prevPt, 0.88);
+            const b2 = startPt.clone().lerp(pt, 0.88);
+            forewingGroup.add(createVeinStrut(b1, b2, 0.012, 0.012, brassGearMat));
+          }
+        });
+
+        // Glowing Multi-Ring Eyespots & Marginal Jewels on Forewing
+        const fwSpots = [
+          { x: 2.15, y: 0.92, r: 0.22, mat: emeraldSpotMat },
+          { x: 1.85, y: 0.35, r: 0.17, mat: sunsetGoldMat },
+          { x: 1.42, y: -0.08, r: 0.15, mat: royalVioletMat },
+          { x: 2.48, y: 1.08, r: 0.09, mat: sunsetGoldMat },
+          { x: 2.45, y: 0.65, r: 0.08, mat: morphoCyanMat },
+          { x: 2.18, y: 0.22, r: 0.08, mat: emeraldSpotMat }
+        ];
+        fwSpots.forEach(sp => {
+          const disc = new THREE.Mesh(new THREE.CylinderGeometry(sp.r, sp.r, 0.026, 24), sp.mat);
+          disc.rotation.x = Math.PI / 2;
+          disc.position.set(sp.x, sp.y, 0);
+          forewingGroup.add(disc);
+
+          const rim = new THREE.Mesh(new THREE.TorusGeometry(sp.r * 1.05, 0.014, 10, 28), brassGearMat);
+          rim.position.set(sp.x, sp.y, 0);
+          forewingGroup.add(rim);
+        });
+
+        // Mechanical Micro-Gear Embedded inside the Forewing Cell
+        const wingMicroGear = createMechanicalGear(0.24, 0.045, 14, brassGearMat);
+        wingMicroGear.rotation.x = Math.PI / 2;
+        wingMicroGear.position.set(0.95, 0.35, 0);
+        forewingGroup.add(wingMicroGear);
+        animatedGears.push({ mesh: wingMicroGear, axis: 'y', speed: 2.6 * side });
+
+        // --- 2. LOWER HINDWING (Swallowtail + Royal Violet & Emerald Eyespots) ---
+        const hindwingGroup = new THREE.Group();
+        hindwingGroup.rotation.x = -Math.PI / 2 + 0.08;
+        hindwingGroup.position.set(0, -0.04, -0.18);
+        wingAssembly.add(hindwingGroup);
+
+        const hwBase = new THREE.Mesh(hindwingGeom, royalVioletMat);
+        hindwingGroup.add(hwBase);
+
+        const hwInner = new THREE.Mesh(hindwingGeom, morphoCyanMat);
+        hwInner.scale.set(0.74, 0.74, 1);
+        hwInner.position.set(0.14, -0.12, 0.008);
+        hindwingGroup.add(hwInner);
+
+        const hwInnerBack = hwInner.clone();
+        hwInnerBack.position.z = -0.008;
+        hindwingGroup.add(hwInnerBack);
+
+        const hwCore = new THREE.Mesh(hindwingGeom, monarchMagentaMat);
+        hwCore.scale.set(0.45, 0.45, 1);
+        hwCore.position.set(0.08, -0.06, 0.015);
+        hindwingGroup.add(hwCore);
+
+        const hwCoreBack = hwCore.clone();
+        hwCoreBack.position.z = -0.015;
+        hindwingGroup.add(hwCoreBack);
+
+        // Hindwing Filigree Veins + Swallowtail Spur
+        const hwTargets = [
+          new THREE.Vector3(1.88, -0.52, 0),
+          new THREE.Vector3(1.92, -0.95, 0),
+          new THREE.Vector3(1.62, -1.38, 0),
+          new THREE.Vector3(1.32, -2.08, 0), // Swallowtail tip
+          new THREE.Vector3(0.92, -1.52, 0),
+          new THREE.Vector3(0.48, -1.12, 0)
+        ];
+        const hwHub = new THREE.Vector3(0.82, -0.58, 0);
+        hindwingGroup.add(createVeinStrut(rootOrigin, hwHub, 0.028, 0.02, brassGearMat));
+
+        hwTargets.forEach((pt, idx) => {
+          hindwingGroup.add(createVeinStrut(hwHub, pt, 0.018, 0.008, idx % 2 === 0 ? brassGearMat : copperMat));
+          if (idx > 0) {
+            const prevPt = hwTargets[idx - 1];
+            const c1 = hwHub.clone().lerp(prevPt, 0.68);
+            const c2 = hwHub.clone().lerp(pt, 0.68);
+            hindwingGroup.add(createVeinStrut(c1, c2, 0.012, 0.012, brassGearMat));
+          }
+        });
+
+        // Hindwing Peacock/Monarch Eyespots
+        const hwSpots = [
+          { x: 1.38, y: -0.95, r: 0.21, mat: sunsetGoldMat },
+          { x: 1.38, y: -0.95, r: 0.11, mat: coreGlowMat },
+          { x: 1.52, y: -0.58, r: 0.13, mat: emeraldSpotMat },
+          { x: 1.05, y: -1.25, r: 0.14, mat: emeraldSpotMat }
+        ];
+        hwSpots.forEach(sp => {
+          const disc = new THREE.Mesh(new THREE.CylinderGeometry(sp.r, sp.r, 0.028, 24), sp.mat);
+          disc.rotation.x = Math.PI / 2;
+          disc.position.set(sp.x, sp.y, 0);
+          hindwingGroup.add(disc);
+
+          const rim = new THREE.Mesh(new THREE.TorusGeometry(sp.r * 1.06, 0.013, 10, 24), brassGearMat);
+          rim.position.set(sp.x, sp.y, 0);
+          hindwingGroup.add(rim);
+        });
+
+        animatedWings.push({ pivot: wingPivot, side, baseRotZ: side * 0.62 });
+      });
+
+      // ------------------------------------------
+      // C. INTERNAL MECHANICAL CLOCKWORK ENGINE
+      // ------------------------------------------
+      const internalMechGroup = new THREE.Group();
+      insectRoot.add(internalMechGroup);
+
+      // 1. Central Longitudinal Spine & Rotating Drive Shaft
+      const mainDriveShaft = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.048, 0.048, 2.85, 16),
+        chromeShaftMat
+      );
+      mainDriveShaft.rotation.x = Math.PI / 2;
+      mainDriveShaft.position.set(0, bodyY + 0.04, -0.15);
+      internalMechGroup.add(mainDriveShaft);
+
+      [-1.35, -0.8, -0.25, 0.3, 0.85].forEach(zPos => {
+        const collar = new THREE.Mesh(
+          new THREE.CylinderGeometry(0.095, 0.075, 0.1, 16),
+          darkSteelMat
+        );
+        collar.rotation.x = Math.PI / 2;
+        collar.position.set(0, bodyY + 0.04, zPos);
+        internalMechGroup.add(collar);
+      });
+
+      // 2. Interlocking Clockwork Gear Train (9 Multi-Colored Precision Gears inside Thorax & Abdomen)
+      const gearConfigs = [
+        { r: 0.38, t: 0.09, teeth: 18, mat: brassGearMat, pos: [0, bodyY + 0.22, 0.32], rotAxis: 'y', speed: 2.0 },
+        { r: 0.26, t: 0.08, teeth: 12, mat: copperMat, pos: [0.28, bodyY + 0.22, 0.02], rotAxis: 'y', speed: -3.0 },
+        { r: 0.26, t: 0.08, teeth: 12, mat: copperMat, pos: [-0.28, bodyY + 0.22, 0.02], rotAxis: 'y', speed: -3.0 },
+        { r: 0.34, t: 0.09, teeth: 16, mat: anodizedVioletMat, pos: [0, bodyY + 0.12, -0.45], rotAxis: 'y', speed: 1.6 },
+        { r: 0.25, t: 0.08, teeth: 12, mat: brassGearMat, pos: [0, bodyY - 0.1, -0.95], rotAxis: 'y', speed: -2.4 },
+        { r: 0.28, t: 0.08, teeth: 14, mat: brassGearMat, pos: [0.22, bodyY + 0.06, 0.35], rotAxis: 'x', speed: 2.5 },
+        { r: 0.28, t: 0.08, teeth: 14, mat: brassGearMat, pos: [-0.22, bodyY + 0.06, 0.35], rotAxis: 'x', speed: -2.5 },
+        { r: 0.22, t: 0.07, teeth: 12, mat: copperMat, pos: [0, bodyY + 0.08, 1.05], rotAxis: 'z', speed: 3.4 },
+        { r: 0.26, t: 0.07, teeth: 14, mat: chromeShaftMat, pos: [0, bodyY - 0.02, -1.45], rotAxis: 'z', speed: -2.2 }
+      ];
+
+      gearConfigs.forEach(cfg => {
+        const g = createMechanicalGear(cfg.r, cfg.t, cfg.teeth, cfg.mat);
+        g.position.set(...cfg.pos);
+        if (cfg.rotAxis === 'x') g.rotation.z = Math.PI / 2;
+        if (cfg.rotAxis === 'z') g.rotation.x = Math.PI / 2;
+        internalMechGroup.add(g);
+        animatedGears.push({ mesh: g, axis: cfg.rotAxis, speed: cfg.speed });
+      });
+
+      // 3. Pulsing Prismatic Heart Core & Reciprocating Twin Thorax Pistons
+      const coreChamber = new THREE.Mesh(
+        new THREE.OctahedronGeometry(0.24, 2),
+        coreGlowMat
+      );
+      coreChamber.scale.set(1.1, 0.85, 1.35);
+      coreChamber.position.set(0, bodyY + 0.05, 0.35);
+      internalMechGroup.add(coreChamber);
+
+      for (let c = -2; c <= 2; c++) {
+        const coil = new THREE.Mesh(
+          new THREE.TorusGeometry(0.24, 0.02, 10, 24),
+          copperMat
+        );
+        coil.position.set(0, bodyY + 0.05, 0.35 + c * 0.09);
+        internalMechGroup.add(coil);
+      }
+
+      [-1, 1].forEach(side => {
+        const cylHousing = new THREE.Mesh(
+          new THREE.CylinderGeometry(0.1, 0.1, 0.48, 16),
+          darkSteelMat
+        );
+        cylHousing.position.set(side * 0.24, bodyY - 0.02, -0.52);
+        cylHousing.rotation.z = side * 0.32;
+        internalMechGroup.add(cylHousing);
+
+        const pistonRod = new THREE.Mesh(
+          new THREE.CylinderGeometry(0.052, 0.052, 0.45, 16),
+          brassGearMat
+        );
+        pistonRod.position.set(side * 0.24, bodyY + 0.1, -0.52);
+        pistonRod.rotation.z = side * 0.32;
+        internalMechGroup.add(pistonRod);
+
+        animatedPistons.push({
+          mesh: pistonRod,
+          baseY: bodyY + 0.04,
+          baseX: side * 0.24,
+          side,
+          phase: side === 1 ? 0 : Math.PI
+        });
+      });
+
+      // ------------------------------------------
+      // D. SIX DELICATE ARTICULATED BUTTERFLY LEGS + CRYSTAL PEDESTAL RING
+      // ------------------------------------------
+      // Pedestal Filigree Ring on the Build Plate connecting the 6 tarsal claws
+      const pedestalRing = new THREE.Mesh(
+        new THREE.TorusGeometry(1.15, 0.025, 12, 48),
+        brassGearMat
+      );
+      pedestalRing.rotation.x = Math.PI / 2;
+      pedestalRing.position.y = 0.03;
+      insectRoot.add(pedestalRing);
+
+      const legZAttachments = [0.55, 0.18, -0.22];
+      legZAttachments.forEach((zAttach, legIdx) => {
+        [-1, 1].forEach(side => {
+          const legRoot = new THREE.Group();
+          insectRoot.add(legRoot);
+
+          const coxaPos = new THREE.Vector3(side * 0.36, bodyY - 0.15, zAttach);
+          const zSpread = (legIdx === 0) ? 0.38 : (legIdx === 2 ? -0.42 : 0.0);
+          const kneePos = new THREE.Vector3(side * 0.88, bodyY - 0.05, zAttach + zSpread * 0.5);
+          const anklePos = new THREE.Vector3(side * 1.05, 0.45, zAttach + zSpread * 0.85);
+          const footPos = new THREE.Vector3(side * 1.15 * Math.cos(zSpread * 0.5), 0.03, zAttach + zSpread * 1.05);
+
+          [coxaPos, kneePos, anklePos].forEach((p, idx) => {
+            const j = new THREE.Mesh(
+              new THREE.SphereGeometry(0.068 - idx * 0.012, 14, 14),
+              idx % 2 === 0 ? brassGearMat : copperMat
+            );
+            j.position.copy(p);
+            legRoot.add(j);
+          });
+
+          const footPad = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.11, 0.06, 12), anodizedVioletMat);
+          footPad.position.copy(footPos);
+          legRoot.add(footPad);
+
+          legRoot.add(createVeinStrut(coxaPos, kneePos, 0.032, 0.026, chromeShaftMat));
+          legRoot.add(createVeinStrut(coxaPos, kneePos, 0.068, 0.055, transparentShellMat));
+          legRoot.add(createVeinStrut(kneePos, anklePos, 0.025, 0.02, brassGearMat));
+          legRoot.add(createVeinStrut(anklePos, footPos, 0.018, 0.014, chromeShaftMat));
+        });
+      });
+
+      // ==========================================
+      // 7. ACTIVE SLICING RING, LASER BEAM & SPARKS
+      // ==========================================
+      const slicePlaneGeom = new THREE.RingGeometry(0.15, 2.85, 64);
+      const slicePlaneMat = new THREE.MeshBasicMaterial({
+        color: 0x38bdf8,
+        transparent: true,
+        opacity: 0.14,
+        side: THREE.DoubleSide,
+        depthWrite: false
+      });
+      const slicePlaneMesh = new THREE.Mesh(slicePlaneGeom, slicePlaneMat);
+      slicePlaneMesh.rotation.x = -Math.PI / 2;
+      scene.add(slicePlaneMesh);
+
+      const TRAIL_MAX_POINTS = 90;
+      const trailPositions = new Float32Array(TRAIL_MAX_POINTS * 3);
+      const trailGeom = new THREE.BufferGeometry();
+      trailGeom.setAttribute('position', new THREE.BufferAttribute(trailPositions, 3));
+      const trailMat = new THREE.LineBasicMaterial({
+        color: 0x00f5d4,
+        transparent: true,
+        opacity: 0.92
+      });
+      const nozzleTrailLine = new THREE.Line(trailGeom, trailMat);
+      scene.add(nozzleTrailLine);
+
+      const SPARK_COUNT = 50;
+      const sparkPositions = new Float32Array(SPARK_COUNT * 3);
+      const sparkVelocities = [];
+      for (let i = 0; i < SPARK_COUNT; i++) {
+        sparkPositions[i * 3] = 0;
+        sparkPositions[i * 3 + 1] = 0;
+        sparkPositions[i * 3 + 2] = 0;
+        sparkVelocities.push({
+          vx: (Math.random() - 0.5) * 2.4,
+          vy: Math.random() * 1.6 + 0.2,
+          vz: (Math.random() - 0.5) * 2.4,
+          life: Math.random()
+        });
+      }
+      const sparkGeom = new THREE.BufferGeometry();
+      sparkGeom.setAttribute('position', new THREE.BufferAttribute(sparkPositions, 3));
+      const sparkMat = new THREE.PointsMaterial({
+        color: 0xf472b6,
+        size: 0.085,
+        transparent: true,
+        opacity: 0.92,
+        blending: THREE.AdditiveBlending
+      });
+      const sparkSystem = new THREE.Points(sparkGeom, sparkMat);
+      scene.add(sparkSystem);
+
+      // Compute realistic butterfly cross-section nozzle target at layer height `y`
+      function getNozzleTargetAtHeight(y, timeSec) {
+        const theta = timeSec * 15.0 * Math.sqrt(speedMultiplier);
+        // 1. Delicate Butterfly Legs & Pedestal Zone (0.0 to 0.95)
+        if (y < 0.95) {
+          const legIndex = Math.floor((timeSec * 6 * speedMultiplier) % 6);
+          const side = legIndex % 2 === 0 ? -1 : 1;
+          const pair = Math.floor(legIndex / 2);
+          const zBase = [0.55, 0.18, -0.22][pair];
+          const legProgress = y / 0.95;
+          const cx = side * (1.12 - legProgress * 0.35);
+          const cz = zBase * (1.2 - legProgress * 0.2);
+          return new THREE.Vector3(
+            cx + Math.cos(theta) * 0.1,
+            y,
+            cz + Math.sin(theta) * 0.1
+          );
+        }
+        // 2. Thorax Clockwork Engine, Segmented Abdomen & Lower Hindwings (0.95 to 1.85)
+        if (y < 1.85) {
+          const mode = Math.sin(timeSec * 4.2);
+          if (mode > 0.15) {
+            // Sweeping across the lower swallowtail hindwings & thorax gears
+            const wingSpanX = 0.5 + ((y - 0.95) / 0.9) * 1.35;
+            const side = Math.cos(timeSec * 5.0) >= 0 ? 1 : -1;
+            return new THREE.Vector3(
+              side * wingSpanX + Math.cos(theta) * 0.28,
+              y,
+              -0.45 + Math.sin(theta * 0.7) * 0.95
+            );
+          } else {
+            // Sintering internal clockwork gears & crystal thorax/abdomen
+            const gearMod = 1 + 0.22 * Math.sin(theta * 8);
+            return new THREE.Vector3(
+              Math.cos(theta) * 0.38 * gearMod,
+              y,
+              Math.sin(theta * 0.5) * 1.25 - 0.15
+            );
+          }
+        }
+        // 3. Upper Sweeping Stained-Glass Forewings, Eyespots & Antennae (1.85 to 3.6)
+        const wingProgress = (y - 1.85) / (PRINT_Y_MAX - 1.85);
+        const spanOut = 0.75 + wingProgress * 1.65;
+        const side = Math.sin(timeSec * 4.8) >= 0 ? 1 : -1;
+        return new THREE.Vector3(
+          side * spanOut + Math.cos(theta) * 0.35 * (1 - wingProgress * 0.35),
+          y,
+          0.35 + Math.sin(theta * 0.6) * (1.15 - wingProgress * 0.45)
+        );
+      }
+
+      // ==========================================
+      // 8. UI CONTROLS & EVENT LISTENERS
+      // ==========================================
+      function syncUI() {
+        const totalRequired = BASE_DURATION_SECONDS / speedMultiplier;
+        const remaining = Math.max(0, (1 - printProgress) * totalRequired);
+        const currentLayer = Math.min(TOTAL_LAYERS, Math.floor(printProgress * TOTAL_LAYERS));
+        const pct = Math.round(printProgress * 100);
+        const currentZmm = (printProgress * 36.0).toFixed(2);
+
+        totalTimeDisplay.textContent = `${totalRequired.toFixed(2)} s`;
+        elapsedTimeDisplay.textContent = `${elapsedDrawSeconds.toFixed(2)} s`;
+        remainingTimeDisplay.textContent = `${remaining.toFixed(2)} s`;
+        layerCurrentEl.textContent = currentLayer;
+        percentDisplayEl.textContent = `(${pct}%)`;
+        zHeightLabel.textContent = `Z-Height: ${currentZmm} mm / 36.00 mm`;
+        progressScrubber.value = Math.round(printProgress * 1000);
+
+        // Update Internal Assembly Spec Status based on current print height
+        specServos.textContent = printProgress > 0.32 ? 'Sintered ✓' : `Printing (${Math.min(100, Math.round(printProgress / 0.32 * 100))}%)`;
+        specCore.textContent = printProgress > 0.52 ? 'Online ✓' : (printProgress > 0.28 ? 'Sintering...' : 'Pending...');
+        specGears.textContent = printProgress > 0.65 ? 'Meshed (9/9) ✓' : (printProgress > 0.30 ? `Layering (${Math.min(9, Math.floor((printProgress - 0.3) / 0.04))}/9)` : 'Pending...');
+
+        // Status Badge & Button States
+        if (printProgress >= 1.0) {
+          statusBadge.className = 'inline-flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wider px-2.5 py-0.5 rounded-full bg-sky-500/20 text-sky-300 border border-sky-400/30';
+          statusDot.className = 'w-1.5 h-1.5 rounded-full bg-sky-400';
+          statusText.textContent = 'COMPLETE';
+          completionBanner.classList.remove('hidden');
+          finalTimeTakenEl.textContent = `${elapsedDrawSeconds.toFixed(2)} s`;
+          startBtn.disabled = false;
+          startBtn.querySelector('span').textContent = 'Re-Print';
+          stopBtn.disabled = true;
+        } else if (isPrinting) {
+          statusBadge.className = 'inline-flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wider px-2.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-400/30';
+          statusDot.className = 'w-1.5 h-1.5 rounded-full bg-emerald-400 status-dot-active';
+          statusText.textContent = 'PRINTING';
+          completionBanner.classList.add('hidden');
+          startBtn.disabled = true;
+          startBtn.querySelector('span').textContent = 'Start Print';
+          stopBtn.disabled = false;
+        } else {
+          statusBadge.className = 'inline-flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wider px-2.5 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-400/30';
+          statusDot.className = 'w-1.5 h-1.5 rounded-full bg-amber-400';
+          statusText.textContent = 'PAUSED';
+          completionBanner.classList.add('hidden');
+          startBtn.disabled = false;
+          startBtn.querySelector('span').textContent = printProgress > 0 ? 'Resume Print' : 'Start Print';
+          stopBtn.disabled = true;
+        }
+      }
+
+      // Start Button
+      startBtn.addEventListener('click', () => {
+        initAudio();
+        if (printProgress >= 1.0) {
+          printProgress = 0.0;
+          elapsedDrawSeconds = 0.0;
+        }
+        isPrinting = true;
+        syncUI();
+      });
+
+      // Stop Button
+      stopBtn.addEventListener('click', () => {
+        isPrinting = false;
+        syncUI();
+      });
+
+      // Reset Button
+      resetBtn.addEventListener('click', () => {
+        isPrinting = false;
+        printProgress = 0.0;
+        elapsedDrawSeconds = 0.0;
+        trailPositions.fill(0);
+        trailGeom.attributes.position.needsUpdate = true;
+        syncUI();
+      });
+
+      // Speed Multiplier Buttons
+      speedBtns.forEach(btn => {
+        btn.addEventListener('click', () => {
+          speedMultiplier = parseFloat(btn.getAttribute('data-speed'));
+          speedBtns.forEach(b => {
+            b.className = 'speed-btn px-2.5 py-1 rounded-lg text-xs font-semibold text-slate-300 hover:text-white transition';
+          });
+          btn.className = 'speed-btn px-2.5 py-1 rounded-lg text-xs font-semibold bg-sky-500 text-slate-950 transition';
+          syncUI();
+        });
+      });
+
+      // Manual Layer Scrubber
+      progressScrubber.addEventListener('input', (e) => {
+        printProgress = parseFloat(e.target.value) / 1000;
+        const totalRequired = BASE_DURATION_SECONDS / speedMultiplier;
+        elapsedDrawSeconds = printProgress * totalRequired;
+        syncUI();
+      });
+
+      // Exoskeleton Opacity Slider
+      shellOpacitySlider.addEventListener('input', (e) => {
+        const val = parseInt(e.target.value, 10);
+        transparentShellMat.opacity = val / 100;
+        opacityLabel.textContent = `${val}% Opacity`;
+      });
+
+      // Internal Clockwork Toggle
+      toggleMechBtn.addEventListener('click', () => {
+        mechanoActive = !mechanoActive;
+        toggleMechBtn.textContent = mechanoActive ? 'Active: ON' : 'Active: OFF';
+        toggleMechBtn.className = mechanoActive
+          ? 'px-2.5 py-1 rounded-lg bg-amber-500/20 border border-amber-400/40 text-amber-300 text-xs font-medium hover:bg-amber-500/30 transition'
+          : 'px-2.5 py-1 rounded-lg bg-slate-800 border border-slate-600 text-slate-400 text-xs font-medium hover:bg-slate-700 transition';
+      });
+
+      // Auto-Orbit Turntable Toggle
+      toggleOrbitBtn.addEventListener('click', () => {
+        autoOrbit = !autoOrbit;
+        toggleOrbitBtn.textContent = autoOrbit ? 'Orbit: ON' : 'Orbit: OFF';
+        toggleOrbitBtn.className = autoOrbit
+          ? 'px-2.5 py-1 rounded-lg bg-sky-500/20 border border-sky-400/40 text-sky-300 text-xs font-medium hover:bg-sky-500/30 transition'
+          : 'px-2.5 py-1 rounded-lg bg-slate-800 border border-slate-600 text-slate-300 text-xs font-medium hover:bg-slate-700 transition';
+      });
+
+      // Sound Toggle
+      audioBtn.addEventListener('click', () => {
+        initAudio();
+        if (audioCtx && audioCtx.state === 'suspended') {
+          audioCtx.resume();
+        }
+        soundEnabled = !soundEnabled;
+        audioIcon.textContent = soundEnabled ? '🔊' : '🔇';
+        audioLabel.textContent = soundEnabled ? 'Sound On' : 'Sound Off';
+        audioBtn.className = soundEnabled
+          ? 'px-3 py-2 rounded-xl bg-sky-500/20 border border-sky-400/50 text-sky-300 text-xs font-medium flex items-center gap-1.5 transition'
+          : 'px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-600/80 text-slate-300 text-xs font-medium flex items-center gap-1.5 transition';
+      });
+
+      // Camera View Presets
+      document.getElementById('cam-iso').addEventListener('click', () => {
+        camState.theta = 0.65;
+        camState.phi = 1.08;
+        camState.radius = 10.5;
+        updateCameraPosition();
+      });
+      document.getElementById('cam-side').addEventListener('click', () => {
+        camState.theta = Math.PI / 2;
+        camState.phi = 1.42;
+        camState.radius = 9.2;
+        updateCameraPosition();
+      });
+      document.getElementById('cam-top').addEventListener('click', () => {
+        camState.theta = 0.0;
+        camState.phi = 0.24;
+        camState.radius = 10.0;
+        updateCameraPosition();
+      });
+
+      // Responsive Resize
+      window.addEventListener('resize', () => {
+        camera.aspect = window.innerWidth / window.innerHeight;
+        camera.updateProjectionMatrix();
+        renderer.setSize(window.innerWidth, window.innerHeight);
+      });
+
+      // ==========================================
+      // 9. MAIN ANIMATION & SIMULATION LOOP
+      // ==========================================
+      let lastTime = performance.now();
+
+      function animate(now) {
+        requestAnimationFrame(animate);
+
+        const dt = Math.min(0.05, (now - lastTime) / 1000);
+        lastTime = now;
+        const timeSec = now * 0.001;
+
+        // 1. Update Additive Printing Progress & Timer
+        if (isPrinting && printProgress < 1.0) {
+          const totalRequired = BASE_DURATION_SECONDS / speedMultiplier;
+          printProgress = Math.min(1.0, printProgress + dt / totalRequired);
+          elapsedDrawSeconds += dt;
+          if (printProgress >= 1.0) {
+            isPrinting = false;
+          }
+          syncUI();
+        }
+
+        // 2. Update Clipping Plane Height
+        const currentPrintY = PRINT_Y_MIN + printProgress * (PRINT_Y_MAX - PRINT_Y_MIN);
+        printClipPlane.constant = currentPrintY;
+        slicePlaneMesh.position.y = currentPrintY;
+        slicePlaneMesh.visible = printProgress > 0.002 && printProgress < 0.998;
+
+        // 3. Move 3D Printer Gantry, Bridge & Nozzle
+        const activePrinting = isPrinting && printProgress < 1.0;
+        let nozzleTarget;
+        if (activePrinting) {
+          nozzleTarget = getNozzleTargetAtHeight(currentPrintY, timeSec);
+        } else {
+          // Park nozzle slightly above the model when paused or finished
+          nozzleTarget = new THREE.Vector3(0, Math.min(4.1, currentPrintY + 0.35), 0);
+        }
+
+        // Gantry Z height (Remember tipGlow is at y = -0.61 relative to zGantryGroup)
+        const targetGantryY = nozzleTarget.y + 0.61;
+        zGantryGroup.position.y += (targetGantryY - zGantryGroup.position.y) * 0.25;
+        yBridgeGroup.position.z += (nozzleTarget.z - yBridgeGroup.position.z) * 0.35;
+        printHeadGroup.position.x += (nozzleTarget.x - printHeadGroup.position.x) * 0.35;
+
+        const actualTipPos = new THREE.Vector3(
+          printHeadGroup.position.x,
+          zGantryGroup.position.y - 0.61,
+          yBridgeGroup.position.z
+        );
+
+        nozzleLight.position.copy(actualTipPos);
+        nozzleLight.intensity = activePrinting ? (2.4 + Math.sin(timeSec * 35) * 0.6) : 0.6;
+        if (activePrinting) {
+          const hue = (timeSec * 0.25 + printProgress * 2.0) % 1.0;
+          nozzleLight.color.setHSL(hue, 0.95, 0.58);
+          tipGlow.material.color.setHSL(hue, 0.95, 0.62);
+          trailMat.color.setHSL(hue, 0.95, 0.62);
+          sparkMat.color.setHSL((hue + 0.15) % 1.0, 0.95, 0.65);
+        }
+        tipGlow.visible = activePrinting;
+
+        // Update Telemetry Coordinates
+        nozzleCoordsEl.textContent = `X:${(actualTipPos.x * 10).toFixed(1)} Y:${(actualTipPos.z * 10).toFixed(1)} Z:${(actualTipPos.y * 10).toFixed(1)}`;
+        nozzleTempEl.textContent = activePrinting ? `${(215 + Math.sin(timeSec * 7) * 1.4).toFixed(1)} °C` : '180.0 °C (Standby)';
+        laserPowerEl.textContent = activePrinting ? '405 nm • 92%' : '405 nm • Idle';
+
+        // Update Nozzle Contour Trail
+        if (activePrinting) {
+          for (let i = (TRAIL_MAX_POINTS - 1) * 3; i >= 3; i -= 3) {
+            trailPositions[i] = trailPositions[i - 3];
+            trailPositions[i + 1] = currentPrintY;
+            trailPositions[i + 2] = trailPositions[i - 1];
+          }
+          trailPositions[0] = actualTipPos.x;
+          trailPositions[1] = currentPrintY;
+          trailPositions[2] = actualTipPos.z;
+          trailGeom.attributes.position.needsUpdate = true;
+          nozzleTrailLine.visible = true;
+        } else {
+          nozzleTrailLine.visible = false;
+        }
+
+        // 4. Update Spark Particles at Extrusion Point
+        sparkSystem.visible = activePrinting;
+        if (activePrinting) {
+          const posAttr = sparkGeom.attributes.position;
+          for (let i = 0; i < SPARK_COUNT; i++) {
+            const sv = sparkVelocities[i];
+            sv.life += dt * 3.8;
+            if (sv.life >= 1.0) {
+              sv.life = 0;
+              posAttr.setXYZ(i, actualTipPos.x, actualTipPos.y, actualTipPos.z);
+              sv.vx = (Math.random() - 0.5) * 2.4;
+              sv.vy = Math.random() * 1.6 + 0.2;
+              sv.vz = (Math.random() - 0.5) * 2.4;
+            } else {
+              const px = posAttr.getX(i) + sv.vx * dt;
+              const py = posAttr.getY(i) + (sv.vy - 3.2 * sv.life) * dt;
+              const pz = posAttr.getZ(i) + sv.vz * dt;
+              posAttr.setXYZ(i, px, py, pz);
+            }
+          }
+          posAttr.needsUpdate = true;
+        }
+
+        // 5. Animate Internal Mechanical Parts (Gears, Pistons, Core, Wings)
+        if (mechanoActive && printProgress > 0.15) {
+          // Rotate main drive shaft
+          mainDriveShaft.rotation.y += dt * 4.5;
+
+          // Rotate 9 internal clockwork gears
+          animatedGears.forEach(g => {
+            g.mesh.rotation.y += dt * g.speed;
+          });
+
+          // Reciprocate twin abdomen pistons
+          animatedPistons.forEach(p => {
+            const stroke = Math.sin(timeSec * 8.0 + p.phase) * 0.12;
+            p.mesh.position.y = p.baseY + stroke * Math.cos(0.35);
+            p.mesh.position.x = p.baseX - p.side * stroke * Math.sin(0.35);
+          });
+
+          // Pulse Prismatic Butterfly Heart Core
+          const pulse = 1.0 + Math.sin(timeSec * 6.5) * 0.1;
+          coreChamber.scale.set(1.1 * pulse, 0.85 * pulse, 1.35 * pulse);
+          coreChamber.rotation.y += dt * 2.2;
+          coreGlowMat.emissiveIntensity = 1.25 + Math.sin(timeSec * 6.5) * 0.55;
+
+          // Graceful mechanical butterfly wing flapping once wings are printed
+          if (printProgress > 0.45) {
+            const flapAmp = printProgress >= 1.0 ? 0.28 : 0.09;
+            const flapAngle = Math.sin(timeSec * 5.2) * flapAmp;
+            animatedWings.forEach(w => {
+              w.pivot.rotation.z = w.baseRotZ + w.side * flapAngle;
+            });
+          }
+        }
+
+        // 6. Auto-Orbit Camera if enabled
+        if (autoOrbit && !camState.isDragging) {
+          camState.theta += dt * 0.35;
+          updateCameraPosition();
+        }
+
+        // 7. Update Audio Synthesizer
+        const nozzleSpeed = activePrinting ? 3.5 : 0;
+        updateAudio(nozzleSpeed, activePrinting);
+
+        renderer.render(scene, camera);
+      }
+
+      syncUI();
+      requestAnimationFrame(animate);
+    });
+  </script>
+</body>
+</html>
