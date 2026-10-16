@@ -855,26 +855,30 @@
       // ------------------------------------------
       // B. INTRICATE COLORFUL STAINED-GLASS & FILIGREE WINGS
       // ------------------------------------------
-      // Helper to build custom curved wing membrane shapes
+      // Note on 3D orientation:
+      // With rotation.x = -Math.PI / 2, local 2D (x, y) maps to World (X = x, Z = -y).
+      // Since the butterfly's Head is at +Z and Abdomen is at -Z:
+      // - Forewings use negative local y (so World Z = -y > 0, sweeping FORWARD toward the head).
+      // - Hindwings use positive local y (so World Z = -y < 0, sweeping BACKWARD along the abdomen).
       function createForewingShape() {
         const sh = new THREE.Shape();
         sh.moveTo(0, 0);
-        sh.bezierCurveTo(0.55, 0.45, 1.65, 1.15, 2.55, 1.38);
-        sh.bezierCurveTo(2.85, 1.42, 2.95, 1.12, 2.72, 0.72);
-        sh.bezierCurveTo(2.45, 0.25, 2.15, -0.22, 1.65, -0.45);
-        sh.bezierCurveTo(1.05, -0.62, 0.42, -0.32, 0, 0);
+        sh.bezierCurveTo(0.55, -0.45, 1.65, -1.15, 2.55, -1.38);
+        sh.bezierCurveTo(2.85, -1.42, 2.95, -1.12, 2.72, -0.72);
+        sh.bezierCurveTo(2.45, -0.25, 2.15, 0.22, 1.65, 0.45);
+        sh.bezierCurveTo(1.05, 0.62, 0.42, 0.32, 0, 0);
         return sh;
       }
 
       function createHindwingShape() {
         const sh = new THREE.Shape();
         sh.moveTo(0, 0);
-        sh.bezierCurveTo(0.55, -0.05, 1.45, -0.18, 1.95, -0.52);
-        sh.bezierCurveTo(2.15, -0.78, 1.92, -1.25, 1.55, -1.48);
-        // Intricate Swallowtail extension
-        sh.bezierCurveTo(1.42, -1.65, 1.48, -2.02, 1.32, -2.12);
-        sh.bezierCurveTo(1.15, -2.02, 1.12, -1.68, 0.92, -1.58);
-        sh.bezierCurveTo(0.55, -1.42, 0.22, -0.85, 0, 0);
+        sh.bezierCurveTo(0.55, 0.05, 1.45, 0.18, 1.95, 0.52);
+        sh.bezierCurveTo(2.15, 0.78, 1.92, 1.25, 1.55, 1.48);
+        // Intricate Swallowtail extension trailing backward toward -Z
+        sh.bezierCurveTo(1.42, 1.65, 1.48, 2.02, 1.32, 2.12);
+        sh.bezierCurveTo(1.15, 2.02, 1.12, 1.68, 0.92, 1.58);
+        sh.bezierCurveTo(0.55, 1.42, 0.22, 0.85, 0, 0);
         return sh;
       }
 
@@ -883,9 +887,9 @@
 
       [-1, 1].forEach(side => {
         const wingPivot = new THREE.Group();
-        wingPivot.position.set(side * 0.34, bodyY + 0.26, 0.25);
-        // Elevate wings gracefully at a 38-degree V-angle so printer layers slice vertically through the intricate patterns
-        wingPivot.rotation.z = side * 0.62;
+        wingPivot.position.set(side * 0.34, bodyY + 0.26, 0.32);
+        // Elevate wings gracefully at a 35-degree dihedral V-angle above the thorax
+        wingPivot.rotation.z = side * 0.58;
         insectRoot.add(wingPivot);
 
         const wingAssembly = new THREE.Group();
@@ -899,10 +903,11 @@
         hingeGear.rotation.x = Math.PI / 2;
         wingAssembly.add(hingeGear);
 
-        // --- 1. UPPER FOREWING (Multi-Colored Stained Glass + Filigree) ---
+        // --- 1. ANTERIOR FOREWING (Sweeping Forward toward +Z Head) ---
         const forewingGroup = new THREE.Group();
-        // Tilt slightly in X/Y so forewing & hindwing have natural 3D camber
-        forewingGroup.rotation.x = -Math.PI / 2 + 0.18;
+        // Slight negative pitch lifts the forward leading edge (+Z) higher than the trailing edge
+        forewingGroup.rotation.x = -Math.PI / 2 - 0.14;
+        forewingGroup.position.set(0, 0.02, 0.08);
         wingAssembly.add(forewingGroup);
 
         // Base Sapphire Morpho Membrane
@@ -912,7 +917,7 @@
         // Inner Monarch Sunset Magenta-Orange Stained-Glass Cell
         const fwInner = new THREE.Mesh(forewingGeom, monarchMagentaMat);
         fwInner.scale.set(0.76, 0.76, 1);
-        fwInner.position.set(0.18, 0.06, 0.008);
+        fwInner.position.set(0.18, -0.06, 0.008);
         forewingGroup.add(fwInner);
 
         const fwInnerBack = fwInner.clone();
@@ -922,7 +927,7 @@
         // Golden Solar Core Cell near Wing Root
         const fwGold = new THREE.Mesh(forewingGeom, sunsetGoldMat);
         fwGold.scale.set(0.46, 0.46, 1);
-        fwGold.position.set(0.08, 0.03, 0.015);
+        fwGold.position.set(0.08, -0.03, 0.015);
         forewingGroup.add(fwGold);
 
         const fwGoldBack = fwGold.clone();
@@ -931,19 +936,19 @@
 
         // Intricate Golden Filigree Venation Ribs radiating across Forewing
         const fwVeinTargets = [
-          new THREE.Vector3(2.62, 1.32, 0),
-          new THREE.Vector3(2.75, 0.88, 0),
-          new THREE.Vector3(2.48, 0.42, 0),
-          new THREE.Vector3(2.12, 0.02, 0),
-          new THREE.Vector3(1.65, -0.38, 0),
-          new THREE.Vector3(1.05, -0.45, 0)
+          new THREE.Vector3(2.62, -1.32, 0),
+          new THREE.Vector3(2.75, -0.88, 0),
+          new THREE.Vector3(2.48, -0.42, 0),
+          new THREE.Vector3(2.12, -0.02, 0),
+          new THREE.Vector3(1.65, 0.38, 0),
+          new THREE.Vector3(1.05, 0.45, 0)
         ];
         const rootOrigin = new THREE.Vector3(0, 0, 0);
-        const midHub = new THREE.Vector3(1.15, 0.42, 0);
+        const midHub = new THREE.Vector3(1.15, -0.42, 0);
 
-        // Main Costal Leading Edge Spar (Thick Golden Strut)
-        forewingGroup.add(createVeinStrut(rootOrigin, new THREE.Vector3(1.45, 0.95, 0), 0.038, 0.028, brassGearMat));
-        forewingGroup.add(createVeinStrut(new THREE.Vector3(1.45, 0.95, 0), new THREE.Vector3(2.62, 1.32, 0), 0.028, 0.016, brassGearMat));
+        // Main Costal Leading Edge Spar (Thick Golden Strut along forward edge)
+        forewingGroup.add(createVeinStrut(rootOrigin, new THREE.Vector3(1.45, -0.95, 0), 0.038, 0.028, brassGearMat));
+        forewingGroup.add(createVeinStrut(new THREE.Vector3(1.45, -0.95, 0), new THREE.Vector3(2.62, -1.32, 0), 0.028, 0.016, brassGearMat));
         forewingGroup.add(createVeinStrut(rootOrigin, midHub, 0.032, 0.022, copperMat));
 
         fwVeinTargets.forEach((pt, idx) => {
@@ -963,12 +968,12 @@
 
         // Glowing Multi-Ring Eyespots & Marginal Jewels on Forewing
         const fwSpots = [
-          { x: 2.15, y: 0.92, r: 0.22, mat: emeraldSpotMat },
-          { x: 1.85, y: 0.35, r: 0.17, mat: sunsetGoldMat },
-          { x: 1.42, y: -0.08, r: 0.15, mat: royalVioletMat },
-          { x: 2.48, y: 1.08, r: 0.09, mat: sunsetGoldMat },
-          { x: 2.45, y: 0.65, r: 0.08, mat: morphoCyanMat },
-          { x: 2.18, y: 0.22, r: 0.08, mat: emeraldSpotMat }
+          { x: 2.15, y: -0.92, r: 0.22, mat: emeraldSpotMat },
+          { x: 1.85, y: -0.35, r: 0.17, mat: sunsetGoldMat },
+          { x: 1.42, y: 0.08, r: 0.15, mat: royalVioletMat },
+          { x: 2.48, y: -1.08, r: 0.09, mat: sunsetGoldMat },
+          { x: 2.45, y: -0.65, r: 0.08, mat: morphoCyanMat },
+          { x: 2.18, y: -0.22, r: 0.08, mat: emeraldSpotMat }
         ];
         fwSpots.forEach(sp => {
           const disc = new THREE.Mesh(new THREE.CylinderGeometry(sp.r, sp.r, 0.026, 24), sp.mat);
@@ -984,14 +989,14 @@
         // Mechanical Micro-Gear Embedded inside the Forewing Cell
         const wingMicroGear = createMechanicalGear(0.24, 0.045, 14, brassGearMat);
         wingMicroGear.rotation.x = Math.PI / 2;
-        wingMicroGear.position.set(0.95, 0.35, 0);
+        wingMicroGear.position.set(0.95, -0.35, 0);
         forewingGroup.add(wingMicroGear);
         animatedGears.push({ mesh: wingMicroGear, axis: 'y', speed: 2.6 * side });
 
-        // --- 2. LOWER HINDWING (Swallowtail + Royal Violet & Emerald Eyespots) ---
+        // --- 2. POSTERIOR HINDWING (Sweeping Backward toward -Z Abdomen with Swallowtails) ---
         const hindwingGroup = new THREE.Group();
-        hindwingGroup.rotation.x = -Math.PI / 2 + 0.08;
-        hindwingGroup.position.set(0, -0.04, -0.18);
+        hindwingGroup.rotation.x = -Math.PI / 2 - 0.06;
+        hindwingGroup.position.set(0, -0.03, -0.18);
         wingAssembly.add(hindwingGroup);
 
         const hwBase = new THREE.Mesh(hindwingGeom, royalVioletMat);
@@ -999,7 +1004,7 @@
 
         const hwInner = new THREE.Mesh(hindwingGeom, morphoCyanMat);
         hwInner.scale.set(0.74, 0.74, 1);
-        hwInner.position.set(0.14, -0.12, 0.008);
+        hwInner.position.set(0.14, 0.12, 0.008);
         hindwingGroup.add(hwInner);
 
         const hwInnerBack = hwInner.clone();
@@ -1008,7 +1013,7 @@
 
         const hwCore = new THREE.Mesh(hindwingGeom, monarchMagentaMat);
         hwCore.scale.set(0.45, 0.45, 1);
-        hwCore.position.set(0.08, -0.06, 0.015);
+        hwCore.position.set(0.08, 0.06, 0.015);
         hindwingGroup.add(hwCore);
 
         const hwCoreBack = hwCore.clone();
@@ -1017,14 +1022,14 @@
 
         // Hindwing Filigree Veins + Swallowtail Spur
         const hwTargets = [
-          new THREE.Vector3(1.88, -0.52, 0),
-          new THREE.Vector3(1.92, -0.95, 0),
-          new THREE.Vector3(1.62, -1.38, 0),
-          new THREE.Vector3(1.32, -2.08, 0), // Swallowtail tip
-          new THREE.Vector3(0.92, -1.52, 0),
-          new THREE.Vector3(0.48, -1.12, 0)
+          new THREE.Vector3(1.88, 0.52, 0),
+          new THREE.Vector3(1.92, 0.95, 0),
+          new THREE.Vector3(1.62, 1.38, 0),
+          new THREE.Vector3(1.32, 2.08, 0), // Swallowtail tip trailing at rear
+          new THREE.Vector3(0.92, 1.52, 0),
+          new THREE.Vector3(0.48, 1.12, 0)
         ];
-        const hwHub = new THREE.Vector3(0.82, -0.58, 0);
+        const hwHub = new THREE.Vector3(0.82, 0.58, 0);
         hindwingGroup.add(createVeinStrut(rootOrigin, hwHub, 0.028, 0.02, brassGearMat));
 
         hwTargets.forEach((pt, idx) => {
@@ -1039,10 +1044,10 @@
 
         // Hindwing Peacock/Monarch Eyespots
         const hwSpots = [
-          { x: 1.38, y: -0.95, r: 0.21, mat: sunsetGoldMat },
-          { x: 1.38, y: -0.95, r: 0.11, mat: coreGlowMat },
-          { x: 1.52, y: -0.58, r: 0.13, mat: emeraldSpotMat },
-          { x: 1.05, y: -1.25, r: 0.14, mat: emeraldSpotMat }
+          { x: 1.38, y: 0.95, r: 0.21, mat: sunsetGoldMat },
+          { x: 1.38, y: 0.95, r: 0.11, mat: coreGlowMat },
+          { x: 1.52, y: 0.58, r: 0.13, mat: emeraldSpotMat },
+          { x: 1.05, y: 1.25, r: 0.14, mat: emeraldSpotMat }
         ];
         hwSpots.forEach(sp => {
           const disc = new THREE.Mesh(new THREE.CylinderGeometry(sp.r, sp.r, 0.028, 24), sp.mat);
@@ -1055,7 +1060,7 @@
           hindwingGroup.add(rim);
         });
 
-        animatedWings.push({ pivot: wingPivot, side, baseRotZ: side * 0.62 });
+        animatedWings.push({ pivot: wingPivot, side, baseRotZ: side * 0.58 });
       });
 
       // ------------------------------------------
